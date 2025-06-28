@@ -67,7 +67,7 @@ class NasdaqCrawler:
             cursor.execute("CREATE DATABASE IF NOT EXISTS fnd CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
             conn.select_db("fnd")
             
-            # 创建数据表（如果不存在），添加唯一索引防止重复数据
+            # 创建数据表（如果不存在），只对date添加唯一索引
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS nasdaq (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -78,7 +78,7 @@ class NasdaqCrawler:
                     peg DECIMAL(10, 2) DEFAULT NULL,
                     date DATE DEFAULT NULL,
                     time TIME DEFAULT NULL,
-                    UNIQUE KEY unique_data (date, pe, pe_percentile, evaluate, peg)
+                    UNIQUE KEY unique_date (date)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
             
@@ -107,17 +107,33 @@ class NasdaqCrawler:
             # roe = self._get_element_text("", 0)  # 暂时不需要
             peg = self._get_element_text(".bot-pencent", 4)
             date = self._get_element_text(".import", 1)
-            
             # 数据处理
             pe = float(pe) if pe else None
             pe_percentile = float(pe_percentile.replace("%", "")) if pe_percentile else None
             evaluate = evaluate.strip() if evaluate else None
             peg = float(peg.replace("%", "")) if peg else None
-            today = datetime.date.today()
-            current_time = datetime.datetime.now().time()
+
+            # 处理页面日期为 MM-DD，拼接本地年份
+            if date:
+                try:
+                    # 页面日期如 06-28，拼接本地年份
+                    if len(date) == 5 and '-' in date:
+                        year = datetime.date.today().year
+                        date_str = f"{year}-{date}"
+                        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+                    else:
+                        # 兼容 YYYY-MM-DD 或 YYYY/MM/DD
+                        date_obj = datetime.datetime.strptime(date.replace('/', '-'), "%Y-%m-%d").date()
+                except Exception:
+                    print(f"页面日期格式异常，未存入数据：{date}")
+                    return
+            else:
+                print("未获取到页面日期，未存入数据")
+                return
+            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             # 保存数据到数据库
-            is_new_data = self._save_to_database(pe, pe_percentile, evaluate, None, peg, today, current_time)
+            is_new_data = self._save_to_database(pe, pe_percentile, evaluate, None, peg, date_obj, current_time)
             
             # 根据PE百分位发送邮件（仅当数据是新数据时）
             if is_new_data and pe_percentile is not None:
@@ -133,7 +149,7 @@ class NasdaqCrawler:
                 'pe_percentile': pe_percentile,
                 'evaluate': evaluate,
                 'peg': peg,
-                'date': str(today),
+                'date': str(date_obj),  # 修正这里
                 'time': str(current_time),
                 'is_new_data': is_new_data
             }
@@ -161,20 +177,22 @@ class NasdaqCrawler:
             conn = pymysql.connect(**self.db_config, database="fnd")
             cursor = conn.cursor()
             
-            # 插入数据，使用INSERT IGNORE避免重复
+            # 先检查是否已存在相同date
+            select_sql = "SELECT id FROM nasdaq WHERE date = %s"
+            cursor.execute(select_sql, (date,))
+            if cursor.fetchone():
+                print("该日期数据已存在，未插入")
+                return False
+
+            # 插入数据
             sql = """
-                INSERT IGNORE INTO nasdaq (pe, pe_percentile, evaluate, roe, peg, date, time)
+                INSERT INTO nasdaq (pe, pe_percentile, evaluate, roe, peg, date, time)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            result = cursor.execute(sql, (pe, pe_percentile, evaluate, roe, peg, date, time))
+            cursor.execute(sql, (pe, pe_percentile, evaluate, roe, peg, date, time))
             conn.commit()
-            
-            if result:
-                print("数据已成功保存到数据库")
-                return True
-            else:
-                print("数据已存在，未插入")
-                return False
+            print("数据已成功保存到数据库")
+            return True
                 
         except Exception as e:
             print(f"保存数据到数据库出错: {e}")
@@ -242,4 +260,4 @@ if __name__ == "__main__":
         if data:
             print("爬取结果:")
             for key, value in data.items():
-                print(f"{key}: {value}")    
+                print(f"{key}: {value}")
