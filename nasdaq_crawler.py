@@ -90,7 +90,7 @@ class NasdaqCrawler:
             conn.close()
     
     def crawl_data(self):
-        """爬取纳斯达克指数数据"""
+        """爬取纳斯达克100指数指数数据"""
         try:
             # 打开网页
             self.driver.get("https://danjuanfunds.com/dj-valuation-table-detail/NDX")
@@ -137,12 +137,19 @@ class NasdaqCrawler:
             
             # 根据PE百分位发送邮件（仅当数据是新数据时）
             if is_new_data and pe_percentile is not None:
-                if pe_percentile > 80:
-                    self._send_email("纳斯达克PE百分位过高", 
-                                     f"当前纳斯达克PE百分位为{pe_percentile}%，超过80%，请注意市场风险！")
+                if pe_percentile > 90:
+                    self._send_email("纳斯达克100指数PE百分位过高", 
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！")
+                elif pe_percentile > 80:
+                    self._send_email("纳斯达克100指数PE百分位过高", 
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过80%，请注意市场风险,出售到20%仓位！")
+                elif pe_percentile < 20:
+                    self._send_email("纳斯达克100指数PE百分位过低", 
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于20%，市场可能被低估,请买卖到80%仓位。")
                 elif pe_percentile < 50:
-                    self._send_email("纳斯达克PE百分位过低", 
-                                     f"当前纳斯达克PE百分位为{pe_percentile}%，低于50%，市场可能被低估。")
+                    self._send_email("纳斯达克100指数PE百分位过低", 
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于50%，市场可能被低估,请买卖到一半仓位。")
+                
             
             return {
                 'pe': pe,
@@ -206,8 +213,8 @@ class NasdaqCrawler:
         """发送邮件"""
         try:
             message = MIMEText(content, 'plain', 'utf-8')
-            message['From'] = Header(self.mail_config['sender'], 'utf-8')
-            message['To'] = Header(", ".join(self.mail_config['receivers']), 'utf-8')
+            message['From'] = self.mail_config['sender']
+            message['To'] = ", ".join(self.mail_config['receivers'])
             message['Subject'] = Header(subject, 'utf-8')
             
             if self.mail_config['smtp_ssl']:
@@ -232,8 +239,8 @@ class NasdaqCrawler:
         """测试邮件发送功能"""
         print("开始测试邮件发送功能...")
         result = self._send_email(
-            "【测试】纳斯达克爬虫邮件功能", 
-            "这是一封测试邮件，用于验证纳斯达克爬虫的邮件发送功能是否正常工作。\n\n"
+            "【测试】纳斯达克100指数爬虫邮件功能", 
+            "这是一封测试邮件，用于验证纳斯达克100指数爬虫的邮件发送功能是否正常工作。\n\n"
             "如果您收到此邮件，说明配置正确。\n\n"
             "该邮件由程序自动发送，请勿回复。"
         )
@@ -245,7 +252,7 @@ class NasdaqCrawler:
 
 if __name__ == "__main__":
     # 解析命令行参数
-    parser = argparse.ArgumentParser(description='纳斯达克指数数据爬虫')
+    parser = argparse.ArgumentParser(description='纳斯达克100指数指数数据爬虫')
     parser.add_argument('--test', action='store_true', help='测试邮件发送功能')
     args = parser.parse_args()
     
