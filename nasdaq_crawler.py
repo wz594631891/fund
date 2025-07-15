@@ -151,6 +151,7 @@ class NasdaqCrawler:
                         principal = config.get('principal', 800000)
                     except FileNotFoundError:
                         principal = 800000
+                #TODO 根据PE百分位计算需要买卖的金额,90-100%:0 80-90%:20% 20-80%:50%  0-20%:80%
                 if pe_percentile > 90:
                     self._send_email("纳斯达克100指数PE百分位过高", 
                                      f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！")
