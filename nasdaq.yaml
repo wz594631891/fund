@@ -1,0 +1,20 @@
+# NASDAQ爬虫配置文件
+# 所有配置项均可通过命令行参数覆盖
+
+# 财务参数
+principal: 800000  # 默认本金金额
+# investment_ratio: 0.8  # 投资比例(总资金的80%)
+
+# # 爬虫设置
+# request_interval: 5  # 请求间隔(秒)，避免触发反爬机制
+# max_retries: 3  # 最大重试次数
+# timeout: 10  # 请求超时时间(秒)
+
+# # 数据源配置
+# nasdaq_url: "https://www.nasdaq.com/market-activity/stocks"
+# user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+
+# # 输出设置
+# data_output_path: "./data"
+# log_level: "INFO"
+# log_file: "nasdaq_crawler.log"
