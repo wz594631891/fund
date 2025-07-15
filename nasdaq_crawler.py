@@ -92,7 +92,7 @@ class NasdaqCrawler:
             conn.close()
     
     def crawl_data(self, cli_principal=None):
-        """爬取纳斯达克100指数指数数据"""
+        """爬取纳斯达克100 PE数据"""
         try:
             # 打开网页
             self.driver.get("https://danjuanfunds.com/dj-valuation-table-detail/NDX")
@@ -152,20 +152,33 @@ class NasdaqCrawler:
                     except FileNotFoundError:
                         principal = 800000
                 #TODO 根据PE百分位计算需要买卖的金额,90-100%:0 80-90%:20% 20-80%:50%  0-20%:80%
+                position=0
+                position_percent=0
                 if pe_percentile > 90:
+                    position_percent=0
+                    position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过高", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！")
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！",
+                                     f"recommend position:{position}")
                 elif pe_percentile > 80:
+                    position_percent=0.2
+                    position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过高", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过80%，请注意市场风险,出售到20%仓位！")
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过80%，请注意市场风险,出售到20%仓位！"
+                                     f"recommend position:{position}")
                 elif pe_percentile < 20:
+                    position_percent=0.8
+                    position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过低", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于20%，市场可能被低估,请买卖到80%仓位。")
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于20%，市场可能被低估,请买卖到80%仓位。"
+                                     f"recommend position:{position}")
                 elif pe_percentile < 50:
+                    position_percent=0.5
+                    position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过低", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于50%，市场可能被低估,请买卖到一半仓位。")
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于50%，市场可能被低估,请买卖到一半仓位。"
+                                     f"recommend position:{position}")
                 
-            
             return {
                 'pe': pe,
                 'pe_percentile': pe_percentile,
