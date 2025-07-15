@@ -11,6 +11,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import yaml
+import os
 
 class NasdaqCrawler:
     def __init__(self):
@@ -137,6 +139,14 @@ class NasdaqCrawler:
             
             # 根据PE百分位发送邮件（仅当数据是新数据时）
             if is_new_data and pe_percentile is not None:
+                # 从配置文件加载本金设置，如果不存在则使用默认值
+                config_path = os.path.join(os.path.dirname(__file__), 'nasdaq.yaml')
+                try:
+                    with open(config_path, 'r') as f:
+                        config = yaml.safe_load(f)
+                    principal = config.get('principal', 800000)
+                except FileNotFoundError:
+                    principal = 800000
                 if pe_percentile > 90:
                     self._send_email("纳斯达克100指数PE百分位过高", 
                                      f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！")
