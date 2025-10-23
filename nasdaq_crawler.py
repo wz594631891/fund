@@ -13,6 +13,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import yaml
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from get_nasdaq_index import get_nasdaq100_latest_data
 
 class NasdaqCrawler:
     def __init__(self):
@@ -80,6 +83,8 @@ class NasdaqCrawler:
                     peg DECIMAL(10, 2) DEFAULT NULL,
                     date DATE DEFAULT NULL,
                     time TIME DEFAULT NULL,
+                    index_value DECIMAL(10, 2) DEFAULT NULL,
+                    rise_rate DECIMAL(10, 2) DEFAULT NULL,
                     UNIQUE KEY unique_date (date)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
@@ -178,6 +183,23 @@ class NasdaqCrawler:
                     self._send_email("纳斯达克100指数PE百分位过低", 
                                      f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于50%，市场可能被低估,请买卖到一半仓位。\n"
                                      f"recommend position:{position}")
+            
+            # 获取纳斯达克100指数值和涨跌幅数据
+            print("正在获取纳斯达克100指数值和涨跌幅数据...")
+            try:
+                index_data = get_nasdaq100_latest_data()
+                if index_data:
+                    index_date = index_data['日期']
+                    index_value = index_data['指数值（收盘价）']
+                    rise_rate = index_data['涨跌幅（%）']
+                    print(f"获取到指数数据: 日期={index_date}, 指数值={index_value}, 涨跌幅={rise_rate}%")
+                    
+                    # 更新数据库中对应日期的记录
+                    self._update_index_data(index_date, index_value, rise_rate)
+                else:
+                    print("未能获取到纳斯达克100指数数据")
+            except Exception as e:
+                print(f"获取或更新指数数据出错: {e}")
                 
             return {
                 'pe': pe,
@@ -231,6 +253,51 @@ class NasdaqCrawler:
                 
         except Exception as e:
             print(f"保存数据到数据库出错: {e}")
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def _update_index_data(self, date, index_value, rise_rate):
+        """更新指定日期的指数值和涨跌幅"""
+        try:
+            conn = pymysql.connect(**self.db_config, database="fnd")
+            cursor = conn.cursor()
+            
+            # 检查是否存在对应日期的记录
+            select_sql = "SELECT id FROM nasdaq WHERE date = %s"
+            cursor.execute(select_sql, (date,))
+            result = cursor.fetchone()
+            
+            if result:
+                # 转换数据类型
+                if hasattr(index_value, 'values'):
+                    index_value = float(index_value.values[0])
+                else:
+                    index_value = float(index_value)
+                    
+                if hasattr(rise_rate, 'values'):
+                    rise_rate = float(rise_rate.values[0])
+                else:
+                    rise_rate = float(rise_rate)
+                
+                # 更新指数值和涨跌幅
+                update_sql = """
+                    UPDATE nasdaq 
+                    SET index_value = %s, rise_rate = %s 
+                    WHERE date = %s
+                """
+                cursor.execute(update_sql, (index_value, rise_rate, date))
+                conn.commit()
+                print(f"已更新 {date} 的指数值: {index_value}, 涨跌幅: {rise_rate}%")
+                return True
+            else:
+                print(f"未找到 {date} 对应的数据记录，跳过更新")
+                return False
+                
+        except Exception as e:
+            print(f"更新指数数据出错: {e}")
             conn.rollback()
             return False
         finally:
