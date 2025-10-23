@@ -146,7 +146,7 @@ class NasdaqCrawler:
                 else:
                     config_path = os.path.join(os.path.dirname(__file__), 'nasdaq.yaml')
                     try:
-                        with open(config_path, 'r') as f:
+                        with open(config_path, 'r', encoding='utf-8') as f:
                             config = yaml.safe_load(f)
                         principal = config.get('principal', 800000)
                     except FileNotFoundError:
@@ -158,25 +158,25 @@ class NasdaqCrawler:
                     position_percent=0
                     position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过高", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！",
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！\n"
                                      f"recommend position:{position}")
                 elif pe_percentile > 80:
                     position_percent=0.2
                     position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过高", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过80%，请注意市场风险,出售到20%仓位！"
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过80%，请注意市场风险,出售到20%仓位！\n"
                                      f"recommend position:{position}")
                 elif pe_percentile < 20:
                     position_percent=0.8
                     position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过低", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于20%，市场可能被低估,请买卖到80%仓位。"
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于20%，市场可能被低估,请买卖到80%仓位。\n"
                                      f"recommend position:{position}")
                 elif pe_percentile < 50:
                     position_percent=0.5
                     position=principal*position_percent
                     self._send_email("纳斯达克100指数PE百分位过低", 
-                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于50%，市场可能被低估,请买卖到一半仓位。"
+                                     f"当前纳斯达克100指数PE百分位为{pe_percentile}%，低于50%，市场可能被低估,请买卖到一半仓位。\n"
                                      f"recommend position:{position}")
                 
             return {
