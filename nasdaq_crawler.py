@@ -162,7 +162,7 @@ class NasdaqCrawler:
                 if pe_percentile > 90:
                     position_percent=0
                     position=principal*position_percent
-                    self._send_email("纳斯达克100指数PE百分位过高", 
+                    self._send_email("纳斯达克100指数PE百分位极高", 
                                      f"当前纳斯达克100指数PE百分位为{pe_percentile}%，超过90%，请清空仓位！\n"
                                      f"recommend position:{position}")
                 elif pe_percentile > 80:
