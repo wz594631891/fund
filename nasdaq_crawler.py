@@ -43,10 +43,10 @@ class NasdaqCrawler:
         self.options.add_argument('--headless')  # 无头模式，可注释掉以便查看浏览器操作
         self.options.add_argument('--disable-gpu')
         self.options.add_argument('--no-sandbox')
-        chrome_path = r"C:\Users\Administrator\AppData\Local\Google\Chrome\Application\chrome.exe"
+        chrome_path = r"C:\Users\Administrator\AppData\Local\Chromium\Application\chrome.exe"
         self.options.binary_location = chrome_path
         self.driver = webdriver.Chrome(
-            executable_path=r"D:\Chrome\yzh\chromedriver.exe",
+            executable_path=r"D:/chromedriver.exe",
             options=self.options
         )
         # 绕过网站的WebDriver检测
