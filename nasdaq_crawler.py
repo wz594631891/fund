@@ -14,6 +14,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import yaml
 import os
 import sys
+import requests
+import json
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from get_nasdaq_index import get_nasdaq100_latest_data
 
@@ -25,6 +27,14 @@ class NasdaqCrawler:
             'user': 'root',
             'password': 'root',
             'charset': 'utf8mb4'
+        }
+        
+        # Cloudflare D1配置
+        self.cf_config = {
+            'account_id': 'f6a0557ce37f4cc7a7eb064f7e9388b3',
+            'database_id': '77534d16-b941-451c-9c54-f4a99103596c',
+            'api_token': 'DWPIu4rZAdeuoGCzJtAUVzQ7GQTpMJw0iImth1rd',
+            'api_url': 'https://api.cloudflare.com/client/v4/accounts/f6a0557ce37f4cc7a7eb064f7e9388b3/d1/database/77534d16-b941-451c-9c54-f4a99103596c/query'
         }
         
         # 邮件配置
@@ -139,8 +149,11 @@ class NasdaqCrawler:
                 return
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            # 保存数据到数据库
+            # 保存数据到MySQL数据库
             is_new_data = self._save_to_database(pe, pe_percentile, evaluate, None, peg, date_obj, current_time)
+            
+            # 保存数据到Cloudflare D1数据库
+            self._save_to_cloudflare_d1(pe, pe_percentile, evaluate, None, peg, date_obj, current_time)
             
             # 根据PE百分位发送邮件（仅当数据是新数据时）
             if is_new_data and pe_percentile is not None:
@@ -259,6 +272,64 @@ class NasdaqCrawler:
             cursor.close()
             conn.close()
     
+    def _save_to_cloudflare_d1(self, pe, pe_percentile, evaluate, roe, peg, date, time):
+        """保存数据到Cloudflare D1数据库，返回是否为新数据"""
+        try:
+            # 先检查是否已存在相同date
+            check_sql = f"SELECT id FROM nasdaq WHERE date = '{date}'"
+            check_response = requests.post(
+                self.cf_config['api_url'],
+                headers={
+                    'Authorization': f"Bearer {self.cf_config['api_token']}",
+                    'Content-Type': 'application/json'
+                },
+                data=json.dumps({'sql': check_sql})
+            )
+            
+            if check_response.status_code == 200:
+                result = check_response.json()
+                if result.get('success') and result.get('result', [{}])[0].get('results', []):
+                    print("Cloudflare D1: 该日期数据已存在，未插入")
+                    return False
+            
+            # 处理NULL值
+            pe_val = 'NULL' if pe is None else pe
+            pe_percentile_val = 'NULL' if pe_percentile is None else pe_percentile
+            evaluate_val = 'NULL' if evaluate is None else f"'{evaluate}'"
+            roe_val = 'NULL' if roe is None else roe
+            peg_val = 'NULL' if peg is None else peg
+            
+            # 插入数据
+            insert_sql = f"""
+                INSERT INTO nasdaq (pe, pe_percentile, evaluate, roe, peg, date, time)
+                VALUES ({pe_val}, {pe_percentile_val}, {evaluate_val}, {roe_val}, {peg_val}, '{date}', '{time}')
+            """
+            insert_response = requests.post(
+                self.cf_config['api_url'],
+                headers={
+                    'Authorization': f"Bearer {self.cf_config['api_token']}",
+                    'Content-Type': 'application/json'
+                },
+                data=json.dumps({'sql': insert_sql})
+            )
+            
+            if insert_response.status_code == 200:
+                result = insert_response.json()
+                if result.get('success'):
+                    print("数据已成功保存到Cloudflare D1")
+                    return True
+                else:
+                    print(f"Cloudflare D1保存失败: {result.get('errors', [])}")
+                    return False
+            else:
+                print(f"Cloudflare D1 API请求失败: {insert_response.status_code}")
+                print(f"响应内容: {insert_response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"保存数据到Cloudflare D1出错: {e}")
+            return False
+    
     def _update_index_data(self, date, index_value, rise_rate):
         """更新指定日期的指数值和涨跌幅"""
         try:
@@ -291,6 +362,10 @@ class NasdaqCrawler:
                 cursor.execute(update_sql, (index_value, rise_rate, date))
                 conn.commit()
                 print(f"已更新 {date} 的指数值: {index_value}, 涨跌幅: {rise_rate}%")
+                
+                # 同时更新Cloudflare D1
+                self._update_cloudflare_d1_index_data(date, index_value, rise_rate)
+                
                 return True
             else:
                 print(f"未找到 {date} 对应的数据记录，跳过更新")
@@ -303,6 +378,52 @@ class NasdaqCrawler:
         finally:
             cursor.close()
             conn.close()
+    
+    def _update_cloudflare_d1_index_data(self, date, index_value, rise_rate):
+        """更新Cloudflare D1中指定日期的指数值和涨跌幅"""
+        try:
+            # 转换数据类型
+            if hasattr(index_value, 'values'):
+                index_value = float(index_value.values[0])
+            else:
+                index_value = float(index_value)
+                
+            if hasattr(rise_rate, 'values'):
+                rise_rate = float(rise_rate.values[0])
+            else:
+                rise_rate = float(rise_rate)
+            
+            # 更新指数值和涨跌幅
+            update_sql = f"""
+                UPDATE nasdaq 
+                SET index_value = {index_value}, rise_rate = {rise_rate} 
+                WHERE date = '{date}'
+            """
+            response = requests.post(
+                self.cf_config['api_url'],
+                headers={
+                    'Authorization': f"Bearer {self.cf_config['api_token']}",
+                    'Content-Type': 'application/json'
+                },
+                data=json.dumps({'sql': update_sql})
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    print(f"Cloudflare D1: 已更新 {date} 的指数值: {index_value}, 涨跌幅: {rise_rate}%")
+                    return True
+                else:
+                    print(f"Cloudflare D1更新失败: {result.get('errors', [])}")
+                    return False
+            else:
+                print(f"Cloudflare D1 API请求失败: {response.status_code}")
+                print(f"响应内容: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"更新Cloudflare D1指数数据出错: {e}")
+            return False
     
     def _send_email(self, subject, content):
         """发送邮件"""
