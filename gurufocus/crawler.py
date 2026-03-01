@@ -346,8 +346,6 @@ if __name__ == "__main__":
         all_data = crawler.crawl_all_pages(start_url)
     
     if all_data:
-        filename = f"gurufocus_data_{int(time.time())}.json"
-        crawler.save_to_json(all_data, filename)
         print(f"总共爬取 {len(all_data)} 条数据")
     else:
         print("未获取到任何数据")
