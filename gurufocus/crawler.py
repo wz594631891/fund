@@ -269,6 +269,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='GuruFocus 爬虫')
     parser.add_argument('-p', '--page', type=int, help='跳过到指定页码')
     parser.add_argument('-l', '--latest', action='store_true', help='只收集第一页')
+    parser.add_argument('-w', '--wait', action='store_true', help='页面打开后暂停等待')
     args = parser.parse_args()
     
     crawler = GuruFocusCrawler()
@@ -276,6 +277,10 @@ if __name__ == "__main__":
     start_url = "https://www.gurufocus.com/economic_indicators/6778/nasdaq-100-pe-ratio"
     
     print(f"开始爬取: {start_url}")
+    
+    if args.wait:
+        print("页面已打开，请手动完成操作后按回车键继续...")
+        input()
     
     if args.page and args.page > 1:
         print(f"跳过到第 {args.page} 页...")
