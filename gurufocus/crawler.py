@@ -189,12 +189,20 @@ class GuruFocusCrawler:
                     pass
                 return self.click_next_page(retry_count + 1)
             else:
-                print("无法点击下一页，已重试3次，请检查页面情况...")
+                print("无法点击下一页，已重试3次，请手动点击下一页...")
                 try:
                     self.close_dialog()
                 except Exception:
                     pass
                 input("按回车键继续...")
+                try:
+                    self.close_dialog()
+                    next_btn = self.driver.find_element(By.CSS_SELECTOR, "i.el-icon.el-icon-arrow-right")
+                    if next_btn:
+                        next_btn.click()
+                        return True
+                except Exception:
+                    pass
                 return False
     
     def has_next_page(self):
@@ -250,13 +258,16 @@ class GuruFocusCrawler:
                 
                 next_page_num = page + 1
                 if self.click_next_page(0):
+                    actual_page = self.get_current_page()
+                    print(f"当前实际页码: {actual_page}")
                     if page % 10 == 0:
-                        print(f"每10页休眠10分钟...")
-                        time.sleep(10 * 60)
+                        sleep_minutes = getattr(self, 'sleep_minutes', 10)
+                        print(f"每10页休眠 {sleep_minutes} 分钟...")
+                        time.sleep(sleep_minutes * 60)
                     wait_time = random.randint(5, 20)
                     print(f"等待 {wait_time} 秒后爬取第 {next_page_num} 页...")
                     time.sleep(wait_time)
-                    page = next_page_num
+                    page = actual_page
                 else:
                     print("无法点击下一页")
                     break
@@ -287,9 +298,11 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--page', type=int, help='跳过到指定页码')
     parser.add_argument('-l', '--latest', action='store_true', help='只收集第一页')
     parser.add_argument('-w', '--wait', action='store_true', help='页面打开后暂停等待')
+    parser.add_argument('-s', '--sleep', type=int, default=10, help='每N页休眠时间(分钟)，默认10分钟')
     args = parser.parse_args()
     
     crawler = GuruFocusCrawler()
+    crawler.sleep_minutes = args.sleep
     
     start_url = "https://www.gurufocus.com/economic_indicators/6778/nasdaq-100-pe-ratio"
     
