@@ -109,6 +109,7 @@ class GuruFocusCrawler:
             """)
             time.sleep(4)
             print("jQuery 导入完成，开始获取数据...")
+            self.close_dialog()
             
             data = self.driver.execute_script("""
                 var result = [];
@@ -135,15 +136,12 @@ class GuruFocusCrawler:
     def close_dialog(self):
         try:
             dialog_closed = self.driver.execute_script("""
-                var checkInterval = setInterval(function() {
-                    var dialogBtn = document.querySelectorAll('body > div.el-dialog__wrapper.gf > div > div.el-dialog__header > button > i')[0];
-                    if (dialogBtn) {
-                        dialogBtn.click();
-                        console.log("已关闭弹窗");
-                        clearInterval(checkInterval);
-                        return true;
-                    }
-                }, 1000);
+                var dialogBtn = document.querySelectorAll('body > div.el-dialog__wrapper.gf > div > div.el-dialog__header > button > i')[0];
+                if (dialogBtn) {
+                    dialogBtn.click();
+                    console.log("已关闭弹窗");
+                    return true;
+                }
                 return false;
             """)
             return dialog_closed
@@ -157,8 +155,21 @@ class GuruFocusCrawler:
         except Exception:
             return 1
     
+    def click_page(self, page_num):
+        try:
+            self.close_dialog()
+            page_elements = self.driver.find_elements(By.CSS_SELECTOR, "li.number")
+            for page_elem in page_elements:
+                if page_elem.text.strip() == str(page_num):
+                    page_elem.click()
+                    return True
+            return False
+        except Exception:
+            return False
+    
     def click_next_page(self, retry_count=0):
         try:
+            self.close_dialog()
             next_btn = self.driver.find_element(By.CSS_SELECTOR, "i.el-icon.el-icon-arrow-right")
             if next_btn:
                 next_btn.click()
@@ -183,6 +194,7 @@ class GuruFocusCrawler:
     
     def has_next_page(self):
         try:
+            self.close_dialog()
             next_btn = self.driver.find_element(By.CSS_SELECTOR, "i.el-icon.el-icon-arrow-right")
             parent = next_btn.find_element(By.XPATH, "..")
             if "disabled" in parent.get_attribute("class"):
@@ -234,8 +246,8 @@ class GuruFocusCrawler:
                 next_page_num = page + 1
                 if self.click_next_page(0):
                     if page % 10 == 0:
-                        print(f"每10页休眠15分钟...")
-                        time.sleep(15 * 60)
+                        print(f"每10页休眠10分钟...")
+                        time.sleep(10 * 60)
                     wait_time = random.randint(5, 20)
                     print(f"等待 {wait_time} 秒后爬取第 {next_page_num} 页...")
                     time.sleep(wait_time)
@@ -284,15 +296,21 @@ if __name__ == "__main__":
     
     if args.page and args.page > 1:
         print(f"跳过到第 {args.page} 页...")
-        for i in range(1, args.page):
-            print(f"正在跳过第 {i} 页...")
+        current_page = 1
+        while current_page < args.page:
+            print(f"正在跳过第 {current_page} 页...")
             crawler.close_dialog()
-            time.sleep(1)
-            if not crawler.has_next_page():
-                print("已到达最后一页")
+            if crawler.click_page(args.page):
+                print(f"已跳转到第 {args.page} 页")
                 break
-            crawler.click_next_page(0)
-            time.sleep(random.randint(5, 20))
+            else:
+                print(f"第 {current_page} 页没有显示目标页码，点击下一页...")
+                if not crawler.has_next_page():
+                    print("已到达最后一页")
+                    break
+                crawler.click_next_page(0)
+                time.sleep(random.randint(5, 20))
+                current_page += 1
     
     if args.latest:
         print("只收集第一页...")
