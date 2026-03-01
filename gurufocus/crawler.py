@@ -58,6 +58,12 @@ class GuruFocusCrawler:
             current_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
             for item in data:
                 cursor.execute("""
+                    SELECT id FROM data WHERE date = ?
+                """, (item['date'],))
+                if cursor.fetchone():
+                    print(f"日期 {item['date']} 已存在，跳过")
+                    continue
+                cursor.execute("""
                     INSERT INTO data (date, value, page, current_datetime)
                     VALUES (?, ?, ?, ?)
                 """, (item['date'], item['value'], page, current_datetime))
@@ -185,14 +191,26 @@ class GuruFocusCrawler:
         except Exception:
             return False
     
+    def check_verification(self):
+        try:
+            body_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+            verification_keywords = ["verification", "captcha", "validate", "human", "confirm", "安全验证", "验证码", "验证"]
+            for keyword in verification_keywords:
+                if keyword in body_text:
+                    return True
+            return False
+        except Exception:
+            return False
+    
     def crawl_all_pages(self, start_url):
         all_data = []
         page = 1
         
         try:
             self.driver.get(start_url)
-            print("如果页面存在验证，请手动完成验证后按回车键继续...")
-            input()
+            if self.check_verification():
+                print("检测到页面存在验证，请手动完成验证后按回车键继续...")
+                input()
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             WebDriverWait(self.driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "tbody"))
@@ -215,6 +233,9 @@ class GuruFocusCrawler:
                 
                 next_page_num = page + 1
                 if self.click_next_page(0):
+                    if page % 10 == 0:
+                        print(f"每10页休眠15分钟...")
+                        time.sleep(15 * 60)
                     wait_time = random.randint(5, 20)
                     print(f"等待 {wait_time} 秒后爬取第 {next_page_num} 页...")
                     time.sleep(wait_time)
@@ -247,6 +268,7 @@ class GuruFocusCrawler:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='GuruFocus 爬虫')
     parser.add_argument('-p', '--page', type=int, help='跳过到指定页码')
+    parser.add_argument('-l', '--latest', action='store_true', help='只收集第一页')
     args = parser.parse_args()
     
     crawler = GuruFocusCrawler()
@@ -267,11 +289,20 @@ if __name__ == "__main__":
             crawler.click_next_page(0)
             time.sleep(random.randint(5, 20))
     
-    data = crawler.crawl_all_pages(start_url)
+    if args.latest:
+        print("只收集第一页...")
+        crawler.close_dialog()
+        page_data = crawler.get_page_data()
+        if page_data:
+            crawler.save_to_database(page_data, 1)
+            print(f"数据已保存到数据库")
+        all_data = page_data
+    else:
+        all_data = crawler.crawl_all_pages(start_url)
     
-    if data:
+    if all_data:
         filename = f"gurufocus_data_{int(time.time())}.json"
-        crawler.save_to_json(data, filename)
-        print(f"总共爬取 {len(data)} 条数据")
+        crawler.save_to_json(all_data, filename)
+        print(f"总共爬取 {len(all_data)} 条数据")
     else:
         print("未获取到任何数据")
