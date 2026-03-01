@@ -180,6 +180,7 @@ class GuruFocusCrawler:
                 print(f"无法点击下一页 (尝试 {retry_count + 1}/3)，等待2秒后重试...")
                 time.sleep(2)
                 try:
+                    self.close_dialog()
                     next_btn = self.driver.find_element(By.CSS_SELECTOR, "i.el-icon.el-icon-arrow-right")
                     if next_btn:
                         next_btn.click()
@@ -189,6 +190,10 @@ class GuruFocusCrawler:
                 return self.click_next_page(retry_count + 1)
             else:
                 print("无法点击下一页，已重试3次，请检查页面情况...")
+                try:
+                    self.close_dialog()
+                except Exception:
+                    pass
                 input("按回车键继续...")
                 return False
     
@@ -291,7 +296,11 @@ if __name__ == "__main__":
     print(f"开始爬取: {start_url}")
     
     if args.wait:
-        print("页面已打开，请手动完成操作后按回车键继续...")
+        crawler.driver.get(start_url)
+        if crawler.check_verification():
+            print("检测到页面存在验证，请手动完成验证后按回车键继续...")
+        else:
+            print("页面已打开，请手动完成操作后按回车键继续...")
         input()
     
     if args.page and args.page > 1:
