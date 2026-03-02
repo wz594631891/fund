@@ -177,7 +177,7 @@ class GuruFocusCrawler:
             return False
         except Exception:
             if retry_count < 3:
-                print(f"无法点击下一页 (尝试 {retry_count + 1}/3)，等待2秒后重试...")
+                print(f"无法点击下一页 (尝试 {retry_count + 1}/4)，等待2秒后重试...")
                 time.sleep(2)
                 try:
                     self.close_dialog()
@@ -189,21 +189,31 @@ class GuruFocusCrawler:
                     pass
                 return self.click_next_page(retry_count + 1)
             else:
-                print("无法点击下一页，已重试3次，请手动点击下一页...")
+                # 第4次（最后一次）使用 execute_script 执行
+                print("无法点击下一页，第4次尝试使用 JavaScript 执行点击...")
                 try:
                     self.close_dialog()
-                except Exception:
-                    pass
-                input("按回车键继续...")
-                try:
-                    self.close_dialog()
-                    next_btn = self.driver.find_element(By.CSS_SELECTOR, "i.el-icon.el-icon-arrow-right")
-                    if next_btn:
-                        next_btn.click()
+                    result = self.driver.execute_script("""
+                        var nextBtn = document.querySelector('i.el-icon.el-icon-arrow-right');
+                        if (nextBtn) {
+                            nextBtn.click();
+                            return true;
+                        }
+                        return false;
+                    """)
+                    
+                    if result:
+                        time.sleep(1)
+                        # 验证页码是否正确
+                        current_page = self.get_current_page()
+                        print(f"JavaScript 点击成功，当前页码: {current_page}")
                         return True
-                except Exception:
-                    pass
-                return False
+                    else:
+                        print("JavaScript 执行：无法找到下一页按钮")
+                        return False
+                except Exception as e:
+                    print(f"JavaScript 执行出错: {e}")
+                    return False
     
     def has_next_page(self):
         try:
@@ -307,8 +317,14 @@ if __name__ == "__main__":
     start_url = "https://www.gurufocus.com/economic_indicators/6778/nasdaq-100-pe-ratio"
     
     print(f"开始爬取: {start_url}")
+    # 普通模式先加载页面，这样 -l 或 -p 都能操作已有内容
+    if not args.wait:
+        crawler.driver.get(start_url)
+        if crawler.check_verification():
+            print("检测到页面存在验证，请手动完成验证后按回车键继续...")
     
     if args.wait:
+        # wait 模式将在加载后暂停，不重复调用 get 影响逻辑
         crawler.driver.get(start_url)
         if crawler.check_verification():
             print("检测到页面存在验证，请手动完成验证后按回车键继续...")
