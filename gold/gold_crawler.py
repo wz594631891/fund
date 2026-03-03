@@ -1,5 +1,4 @@
 import time
-import json
 import sqlite3
 import argparse
 import re
@@ -21,7 +20,6 @@ class GoldReserveCrawler:
             options=self.options
         )
         
-        # 隐藏自动化特征
         self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         })
@@ -30,72 +28,81 @@ class GoldReserveCrawler:
         self._create_database()
 
     def _create_database(self):
+        """创建数据库，包含原始文本、万盎司数值和吨数值"""
         conn = sqlite3.connect(self.db_path)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gold_reserve (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 year INTEGER,
                 month INTEGER,
-                gold_ounces TEXT,
+                raw_text TEXT,          -- 原始采集内容 (如: 7419万盎司)
+                ounces_numeric REAL,    -- 纯数字万盎司 (如: 7419.0)
+                tons_numeric REAL,      -- 转换后的吨数 (如: 2307.57)
                 current_datetime TEXT,
                 UNIQUE(year, month)
             )
         """)
         conn.close()
 
+    def _convert_to_tons(self, text):
+        """将包含'万盎司'的字符串转为纯数字和吨"""
+        try:
+            # 使用正则提取数字部分，支持逗号分隔符和浮点数
+            match = re.search(r'([\d,.]+)', text)
+            if match:
+                clean_num = float(match.group(1).replace(',', ''))
+                # 转换公式: 1万盎司 = 0.311034768 吨
+                tons = clean_num * 0.311034768
+                return clean_num, round(tons, 2)
+            return None, None
+        except Exception as e:
+            print(f"数据转换失败: {e}")
+            return None, None
+
     def get_page_data(self, url, year):
         try:
             print(f"正在访问: {url}")
             self.driver.get(url)
             
-            # 1. 穿透 iframe 数据层
+            # 穿透 iframe 
             try:
                 WebDriverWait(self.driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "iframe")))
                 self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, "iframe"))
             except:
-                print("未检测到 iframe，直接解析主页面")
+                pass
 
-            # 2. 等待 tr 加载
             WebDriverWait(self.driver, 15).until(EC.presence_of_all_elements_located((By.TAG_NAME, "tr")))
-            time.sleep(2) # 缓冲渲染
+            time.sleep(2) 
 
-            # 3. 按照你指定的逻辑获取：下标为9的tr行
             trs = self.driver.find_elements(By.TAG_NAME, "tr")
-            if len(trs) < 10:
-                print(f"页面行数不足，当前总行数: {len(trs)}")
-                return []
+            if len(trs) < 10: return []
 
-            target_tr = trs[9] # 下标为9的tr
-            # 获取该行内所有 class 为 xl75 的 td
+            target_tr = trs[9] # 下标9
             tds = target_tr.find_elements(By.CSS_SELECTOR, "td.xl75")
             
-            monthly_results = []
+            results = []
             now_time = time.strftime("%Y-%m-%d %H:%M:%S")
 
-            # 逻辑：下标 N 为双数 (0, 2, 4...)，对应 1, 2, 3... 月
             for i in range(0, len(tds), 2):
                 month_num = (i // 2) + 1
-                if month_num > 12: break # 超过12月停止
+                if month_num > 12: break
                 
-                val = tds[i].text.strip()
+                raw_val = tds[i].text.strip()
                 
-                # 判断内容是否为空，确定数据是否发布
-                if val and val != "":
-                    print(f"发现数据: {year}年{month_num}月 -> {val}")
-                    monthly_results.append({
+                if raw_val:
+                    ounces, tons = self._convert_to_tons(raw_val)
+                    print(f"解析: {month_num}月 | 原始: {raw_val} | 转换: {tons} 吨")
+                    results.append({
                         'year': year,
                         'month': month_num,
-                        'value': val,
+                        'raw_text': raw_val,
+                        'ounces': ounces,
+                        'tons': tons,
                         'time': now_time
                     })
-                else:
-                    print(f"{year}年{month_num}月 数据尚未发布，跳过")
-
-            self.driver.switch_to.default_content()
-            return monthly_results
-
+            return results
         except Exception as e:
-            print(f"解析出错: {e}")
+            print(f"采集出错: {e}")
             return []
 
     def save_to_db(self, data):
@@ -104,15 +111,16 @@ class GoldReserveCrawler:
         cursor = conn.cursor()
         for item in data:
             cursor.execute("""
-                INSERT OR REPLACE INTO gold_reserve (year, month, gold_ounces, current_datetime)
-                VALUES (?, ?, ?, ?)
-            """, (item['year'], item['month'], item['value'], item['time']))
+                INSERT OR REPLACE INTO gold_reserve 
+                (year, month, raw_text, ounces_numeric, tons_numeric, current_datetime)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (item['year'], item['month'], item['raw_text'], item['ounces'], item['tons'], item['time']))
         conn.commit()
         conn.close()
-        print(f"成功存入数据库 {len(data)} 条数据")
+        print(f"成功更新数据库，共 {len(data)} 条记录。")
 
 if __name__ == "__main__":
-    # 配置
+    # 配置信息
     USER_DATA = r'D:\Chrome\yzh\UserData'
     CHROME_EXE = r'C:\Users\Administrator\AppData\Local\Chromium\Application\chrome.exe'
     DRIVER = r'D:\chromedriver.exe'
@@ -123,5 +131,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     crawler = GoldReserveCrawler(USER_DATA, CHROME_EXE, DRIVER)
-    data = crawler.get_page_data(args.url, args.year)
-    crawler.save_to_db(data)
+    try:
+        data = crawler.get_page_data(args.url, args.year)
+        crawler.save_to_db(data)
+    finally:
+        # crawler.driver.quit()
+        pass
