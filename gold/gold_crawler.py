@@ -165,8 +165,8 @@ if __name__ == "__main__":
     DRIVER = r'D:\chromedriver.exe'
     
     parser = argparse.ArgumentParser(description='外汇局黄金储备爬虫')
-    parser.add_argument('-y', '--year', type=int, default=2025)
-    parser.add_argument('-u', '--url', type=str, default='https://www.safe.gov.cn/safe/2025/0206/27115.html')
+    parser.add_argument('-y', '--year', type=int, default=2026)
+    parser.add_argument('-u', '--url', type=str, default='https://www.safe.gov.cn/safe/2026/0206/27116.html')
     args = parser.parse_args()
 
     crawler = GoldReserveCrawler(USER_DATA, CHROME_EXE, DRIVER)
@@ -175,5 +175,5 @@ if __name__ == "__main__":
         crawler.save_to_db(scraped_data)
     finally:
         # 如需保持浏览器开启可注释掉下行
-        # crawler.driver.quit()
+        crawler.driver.quit()
         pass
