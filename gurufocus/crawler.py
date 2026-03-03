@@ -37,6 +37,8 @@ class GuruFocusCrawler:
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
+            
+            # 创建表（如果不存在）
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS data (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,10 +48,37 @@ class GuruFocusCrawler:
                     current_datetime TEXT
                 )
             """)
+            
+            # 为已存在的表添加新字段
+            new_columns = [
+                ('one_std_dev', 'TEXT'),
+                ('mean_value', 'TEXT'),
+                ('minus_one_std_dev', 'TEXT'),
+                ('three_year_20pct', 'TEXT'),
+                ('three_year_50pct', 'TEXT'),
+                ('three_year_80pct', 'TEXT'),
+                ('five_year_20pct', 'TEXT'),
+                ('five_year_50pct', 'TEXT'),
+                ('five_year_80pct', 'TEXT'),
+                ('ten_year_20pct', 'TEXT'),
+                ('ten_year_50pct', 'TEXT'),
+                ('ten_year_80pct', 'TEXT'),
+                ('current_percentile_3year', 'TEXT'),
+                ('current_percentile_5year', 'TEXT'),
+                ('current_percentile_10year', 'TEXT'),
+            ]
+            
+            for column_name, column_type in new_columns:
+                try:
+                    cursor.execute(f"ALTER TABLE data ADD COLUMN {column_name} {column_type}")
+                except Exception as e:
+                    # 字段已存在，忽略错误
+                    pass
+            
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f"数据库初始化错误: {e}")
+            print(f"数据库初始化错误：{e}")
     
     def save_to_database(self, data, page):
         try:
