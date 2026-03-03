@@ -9,10 +9,26 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 class GoldReserveCrawler:
-    def __init__(self, user_data_dir, chrome_binary, driver_path):
+    def __init__(self, user_data_dir, chrome_binary, driver_path, headless=False):
         self.options = Options()
         self.options.add_argument(f'--user-data-dir={user_data_dir}')
         self.options.add_argument('--no-sandbox')
+        self.options.add_argument('--disable-gpu')
+        self.options.add_argument('--disable-extensions')
+        self.options.add_argument('--disable-popup-blocking')
+        # 强制让浏览器启动时打开一个空白页，而不是默认主页
+        # --- 彻底屏蔽 Google 和干扰页的关键参数 ---
+        self.options.add_argument('--homepage=about:blank')      # 设置初始页为白板
+        self.options.add_argument('--no-first-run')             # 跳过首次运行引导
+        self.options.add_argument('--no-default-browser-check') # 不检查默认浏览器
+        self.options.add_argument('--disable-sync')             # 禁用 Google 账号同步
+        self.options.add_argument('--disable-background-networking') # 禁用后台网络连接
+        self.options.add_argument('--mute-audio')               # 静音
+        self.options.add_argument('--window-size=1280,800')      # 固定窗口大小
+        # 无头模式
+        if headless:
+            self.options.add_argument('--headless')
+        
         self.options.binary_location = chrome_binary
         
         # 初始化浏览器
@@ -160,16 +176,18 @@ class GoldReserveCrawler:
 
 if __name__ == "__main__":
     # 请确认以下路径正确
-    USER_DATA = r'D:\Chrome\yzh\UserData'
+    USER_DATA = r'D:\Chrome\yzh\UserData2'
     CHROME_EXE = r'C:\Users\Administrator\AppData\Local\Chromium\Application\chrome.exe'
     DRIVER = r'D:\chromedriver.exe'
     
     parser = argparse.ArgumentParser(description='外汇局黄金储备爬虫')
     parser.add_argument('-y', '--year', type=int, default=2026)
     parser.add_argument('-u', '--url', type=str, default='https://www.safe.gov.cn/safe/2026/0206/27116.html')
+    parser.add_argument('--headless', action='store_true', help='使用无头模式（不显示浏览器窗口）')
+    
     args = parser.parse_args()
 
-    crawler = GoldReserveCrawler(USER_DATA, CHROME_EXE, DRIVER)
+    crawler = GoldReserveCrawler(USER_DATA, CHROME_EXE, DRIVER, headless=args.headless)
     try:
         scraped_data = crawler.get_page_data(args.url, args.year)
         crawler.save_to_db(scraped_data)
