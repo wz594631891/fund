@@ -28,35 +28,48 @@ class GoldReserveCrawler:
         self._create_database()
 
     def _create_database(self):
-        """创建数据库，包含原始文本、万盎司数值和吨数值"""
         conn = sqlite3.connect(self.db_path)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS gold_reserve (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 year INTEGER,
                 month INTEGER,
-                raw_text TEXT,          -- 原始采集内容 (如: 7419万盎司)
-                ounces_numeric REAL,    -- 纯数字万盎司 (如: 7419.0)
-                tons_numeric REAL,      -- 转换后的吨数 (如: 2307.57)
+                raw_text TEXT,
+                ounces_numeric REAL,
+                tons_numeric REAL,
+                tons_diff REAL,         -- 增加/减少吨数，若无上月数据则为 NULL
                 current_datetime TEXT,
                 UNIQUE(year, month)
             )
         """)
         conn.close()
 
+    def _get_previous_month_tons(self, year, month):
+        """查找上个月的吨数数值"""
+        if month == 1:
+            prev_year, prev_month = year - 1, 12
+        else:
+            prev_year, prev_month = year, month - 1
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT tons_numeric FROM gold_reserve WHERE year = ? AND month = ?", (prev_year, prev_month))
+        result = cursor.fetchone()
+        conn.close()
+        # 如果没有找到记录，直接返回 None (即 NULL)
+        return result[0] if result else None
+
     def _convert_to_tons(self, text):
-        """将包含'万盎司'的字符串转为纯数字和吨"""
         try:
-            # 使用正则提取数字部分，支持逗号分隔符和浮点数
             match = re.search(r'([\d,.]+)', text)
             if match:
                 clean_num = float(match.group(1).replace(',', ''))
-                # 转换公式: 1万盎司 = 0.311034768 吨
+                # 转换系数：1万金衡盎司 = 0.311034768 吨
                 tons = clean_num * 0.311034768
                 return clean_num, round(tons, 2)
             return None, None
         except Exception as e:
-            print(f"数据转换失败: {e}")
+            print(f"转换失败: {e}")
             return None, None
 
     def get_page_data(self, url, year):
@@ -64,7 +77,6 @@ class GoldReserveCrawler:
             print(f"正在访问: {url}")
             self.driver.get(url)
             
-            # 穿透 iframe 
             try:
                 WebDriverWait(self.driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "iframe")))
                 self.driver.switch_to.frame(self.driver.find_element(By.TAG_NAME, "iframe"))
@@ -77,7 +89,8 @@ class GoldReserveCrawler:
             trs = self.driver.find_elements(By.TAG_NAME, "tr")
             if len(trs) < 10: return []
 
-            target_tr = trs[9] # 下标9
+            # 定位到你指定的 tr 下标 9
+            target_tr = trs[9]
             tds = target_tr.find_elements(By.CSS_SELECTOR, "td.xl75")
             
             results = []
@@ -88,21 +101,30 @@ class GoldReserveCrawler:
                 if month_num > 12: break
                 
                 raw_val = tds[i].text.strip()
-                
                 if raw_val:
                     ounces, tons = self._convert_to_tons(raw_val)
-                    print(f"解析: {month_num}月 | 原始: {raw_val} | 转换: {tons} 吨")
+                    
+                    # 核心逻辑：获取上月吨数
+                    prev_tons = self._get_previous_month_tons(year, month_num)
+                    
+                    # 如果有上月数据则计算差值，否则设为 None (NULL)
+                    diff = round(tons - prev_tons, 2) if prev_tons is not None else None
+                    
+                    diff_display = f"{diff:+}吨" if diff is not None else "NULL (无基准数据)"
+                    print(f"解析: {month_num}月 | 吨数: {tons} | 增减: {diff_display}")
+                    
                     results.append({
                         'year': year,
                         'month': month_num,
                         'raw_text': raw_val,
                         'ounces': ounces,
                         'tons': tons,
+                        'diff': diff,
                         'time': now_time
                     })
             return results
         except Exception as e:
-            print(f"采集出错: {e}")
+            print(f"运行出错: {e}")
             return []
 
     def save_to_db(self, data):
@@ -112,15 +134,15 @@ class GoldReserveCrawler:
         for item in data:
             cursor.execute("""
                 INSERT OR REPLACE INTO gold_reserve 
-                (year, month, raw_text, ounces_numeric, tons_numeric, current_datetime)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (item['year'], item['month'], item['raw_text'], item['ounces'], item['tons'], item['time']))
+                (year, month, raw_text, ounces_numeric, tons_numeric, tons_diff, current_datetime)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (item['year'], item['month'], item['raw_text'], item['ounces'], item['tons'], item['diff'], item['time']))
         conn.commit()
         conn.close()
-        print(f"成功更新数据库，共 {len(data)} 条记录。")
+        print("数据库入库操作完成。")
 
 if __name__ == "__main__":
-    # 配置信息
+    # 配置
     USER_DATA = r'D:\Chrome\yzh\UserData'
     CHROME_EXE = r'C:\Users\Administrator\AppData\Local\Chromium\Application\chrome.exe'
     DRIVER = r'D:\chromedriver.exe'
@@ -135,5 +157,4 @@ if __name__ == "__main__":
         data = crawler.get_page_data(args.url, args.year)
         crawler.save_to_db(data)
     finally:
-        # crawler.driver.quit()
         pass
