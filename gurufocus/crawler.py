@@ -51,9 +51,15 @@ class GuruFocusCrawler:
             
             # 为已存在的表添加新字段
             new_columns = [
-                ('one_std_dev', 'TEXT'),
-                ('mean_value', 'TEXT'),
-                ('minus_one_std_dev', 'TEXT'),
+                ('one_std_dev_3y', 'TEXT'),
+                ('mean_value_3y', 'TEXT'),
+                ('minus_one_std_dev_3y', 'TEXT'),
+                ('one_std_dev_5y', 'TEXT'),
+                ('mean_value_5y', 'TEXT'),
+                ('minus_one_std_dev_5y', 'TEXT'),
+                ('one_std_dev_10y', 'TEXT'),
+                ('mean_value_10y', 'TEXT'),
+                ('minus_one_std_dev_10y', 'TEXT'),
                 ('three_year_20pct', 'TEXT'),
                 ('three_year_50pct', 'TEXT'),
                 ('three_year_80pct', 'TEXT'),
